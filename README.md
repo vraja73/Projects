@@ -1,2 +1,2 @@
 # Senior Design Project
-Projects made by me
+Remote Cardiovascular Stress Monitor/App
