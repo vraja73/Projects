@@ -1,0 +1,477 @@
+classdef SeniorDesignFinalApp < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure                      matlab.ui.Figure
+        TabGroup                      matlab.ui.container.TabGroup
+        PPGTab                        matlab.ui.container.Tab
+        ConnectedLamp                 matlab.ui.control.Lamp
+        ConnectedLampLabel            matlab.ui.control.Label
+        Label                         matlab.ui.control.Label
+        StartRecordingButton_PPG      matlab.ui.control.Button
+        DirectionsLabel_PPG           matlab.ui.control.Label
+        PulseRateLabel                matlab.ui.control.Label
+        bpm_PPG                       matlab.ui.control.Label
+        UIAxes_PPG1                   matlab.ui.control.UIAxes
+        ThermistorTab                 matlab.ui.container.Tab
+        ConnectedLamp_2               matlab.ui.control.Lamp
+        ConnectedLamp_2Label          matlab.ui.control.Label
+        DirectionsTextbox_Thermistor  matlab.ui.control.Label
+        StartRecordingButton_Thermistor  matlab.ui.control.Button
+        DirectionsLabel_Thermistor    matlab.ui.control.Label
+        RespirationRateLabel          matlab.ui.control.Label
+        bpm_Thermistor                matlab.ui.control.Label
+        UIAxes_Thermistor1            matlab.ui.control.UIAxes
+        ECGTab                        matlab.ui.container.Tab
+        ConnectedLamp_3               matlab.ui.control.Lamp
+        ConnectedLamp_3Label          matlab.ui.control.Label
+        DirectionsTextbox_ECG         matlab.ui.control.Label
+        StartRecordingButton_ECG      matlab.ui.control.Button
+        DirectionsLabel_ECG           matlab.ui.control.Label
+        HeartRateLabel                matlab.ui.control.Label
+        bpm_ECG                       matlab.ui.control.Label
+        UIAxes_ECG1                   matlab.ui.control.UIAxes
+    end
+
+    
+    properties (Access = private)
+        % animated lines
+        j;
+        k;
+        l;
+    end
+
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function startupFcn(app)
+            app.ConnectedLamp.Color = 'w';
+            app.ConnectedLamp_2.Color = 'w';
+            app.ConnectedLamp_3.Color = 'w';
+        end
+
+        % Callback function
+        function StartRecordingButton_PPGPushed(app, event)
+            
+%for all sensors change these to respective app components
+ax = app.UIAxes_PPG1;
+output1 = app.PulseRateLabel;
+
+clc;
+clear a;
+cla(ax);
+
+%Connect to Arduino 
+%to find port for mac type "ls /dev/tty.usb*" into terminal on mac
+a = arduino("/dev/cu.usbmodem14101","Uno");
+
+%to verify if the arduino has connected
+app.ConnectedLamp.Color = 'g';
+
+hold(ax,"on");
+set(figure, 'Visible', 'off'); % removes the default figure pop-up 
+%                                during live plot.
+app.j = animatedline(ax);
+ax.YGrid = 'on';
+ax.XGrid = 'on';
+
+startTime = datetime('now','Format','MM:ss');
+ii = 0;
+%t = zeros(1e4,1);
+
+%set the recording time
+recordingTime = 30;
+
+tic
+while toc <= recordingTime
+    ii = ii + 1;
+    % Read current voltage value
+    v = readVoltage(a,'A2');
+    t =  datetime('now','Format','MM:ss') - startTime;
+    % Add points to animation
+    addpoints(app.j,(datenum(t)* 24 * 3600),v)
+    % Update axes
+    datetick('x','keeplimits')
+    drawnow
+end
+
+[timeLogs,sensorLogs] = getpoints(app.j);
+%timeSecs = (timeLogs-timeLogs(1))*24*3600;
+
+%smooths signal
+    smoothed_signal = smoothdata(sensorLogs,6);
+    baseline = mean(smoothed_signal);
+    bc_signal = smoothed_signal - baseline;
+
+%finds peaks
+[peaks, locs] = findpeaks(bc_signal,timeLogs,'MinPeakProminence', 0.002);
+
+cla(ax);
+hold(ax, 'on');
+plot(ax, timeLogs,bc_signal);
+plot(ax, locs,peaks,"*r");
+hold(ax, 'off');
+
+sensor_measurement = length(peaks)*(60/recordingTime);
+output1.Text = string(sensor_measurement);
+
+app.ConnectedLamp.Color = 'w';
+
+        end
+
+        % Button pushed function: StartRecordingButton_ECG
+        function StartRecordingButton_ECGPushed(app, event)
+                      
+%%for all sensors change these to respective app components
+cx = app.UIAxes_ECG1;
+output3 = app.HeartRateLabel;
+
+clc;
+clear a;
+cla(cx);
+
+%Connect to Arduino 
+%to find port for mac type "ls /dev/tty.usb*" into terminal on mac
+a = arduino("/dev/cu.usbmodem14101","Uno");
+
+%to verify if the arduino has connected
+app.ConnectedLamp_3.Color = 'g';
+
+hold(cx,"on");
+set(figure, 'Visible', 'off'); % removes the default figure 
+%                                  pop-up during live plot.
+app.l = animatedline(cx);
+cx.YGrid = 'on';
+cx.XGrid = 'on';
+
+hold(cx,'on');
+
+%stop = false;
+startTime = datetime('now','Format','ss');
+ii = 0;
+t = zeros(1e4,1);
+
+%determine the recording time
+recordingTime = 30;
+
+tic
+while toc <= recordingTime
+    ii = ii + 1;
+    % Read current voltage value
+    v = readVoltage(a,'A0');
+    t =  datetime('now') - startTime;
+    % Add points to animation
+    addpoints(app.l,(datenum(t)* 24 * 3600),v)
+    % Update axes
+  
+    datetick('x','keeplimits')
+    drawnow
+end
+
+[timeLogs,sensorLogs] = getpoints(app.l);
+
+%finds peaks for respiration rate
+prom = 0.01;
+width = 0.8;
+[peaks, locs] = findpeaks(sensorLogs,timeLogs,'MinPeakProminence', ...
+    prom,'Annotate','extents','MinPeakDistance',width);
+
+hold(cx, 'on');
+plot(cx, timeLogs,sensorLogs);
+plot(cx, locs,peaks,"*r");
+hold(cx, 'off');
+
+xlabel('Elapsed time (sec)');
+ylabel('Voltage (mV)');
+
+sensor_measurement = length(peaks)*(60/recordingTime);
+output3.Text = string(sensor_measurement);
+
+app.ConnectedLamp_3.Color = 'w';
+        end
+
+        % Button pushed function: StartRecordingButton_Thermistor
+        function StartRecordingButton_ThermistorPushed(app, event)
+            
+%%for all sensors change these to respective app components
+bx = app.UIAxes_Thermistor1;
+output2 = app.RespirationRateLabel;
+
+clc;
+clear a;
+cla(bx);
+
+%Connect to Arduino 
+%on mac go to terminal type "ls /dev/tty.usb*" to get usb name
+a = arduino("/dev/tty.usbmodem14101","Uno");
+
+%to verify if the arduino has connected
+app.ConnectedLamp_2.Color = 'g';
+
+hold(bx,"on");
+set(figure, 'Visible', 'off'); % removes the default figure 
+%                               pop-up during live plot.
+app.k = animatedline(bx);
+bx.YGrid = 'on';
+bx.XGrid = 'on';
+hold(bx,'on');
+
+%stop = false;
+startTime = datetime('now','Format','ss');
+ii = 0;
+t = zeros(1e4,1);
+
+%determine the recording time
+recordingTime = 30;
+
+tic
+while toc <= recordingTime
+    ii = ii + 1;
+    % Read current voltage value
+    v = readVoltage(a,'A0');
+    t =  datetime('now','Format','ss') - startTime;
+    % Add points to animation
+    addpoints(app.k,(datenum(t)* 24 * 3600),v)
+    % Update axes
+    datetick('x','keeplimits')
+    drawnow
+end
+
+[timeLogs,sensorLogs] = getpoints(app.k);
+%timeSecs = (timeLogs-timeLogs(1))*24*3600;
+
+%smoothened signal
+smoothed_signal = smoothdata(sensorLogs,6);
+baseline = mean(smoothed_signal);
+bc_signal = smoothed_signal - baseline;
+
+%finds peaks for respiration rate
+[peaks, locs] = findpeaks(bc_signal,timeLogs,'MinPeakProminence', 0.002);
+cla(bx);
+hold(bx, 'on');
+plot(bx, timeLogs,bc_signal);
+plot(bx, locs,peaks,"*r");
+hold(bx, 'off');
+
+xlabel('Elapsed time (sec)');
+ylabel('Voltage (mV)');
+
+sensor_measurement = length(peaks)*(60/recordingTime);
+output2.Text = string(sensor_measurement);
+
+app.ConnectedLamp_2.Color = 'w';
+
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Position = [100 100 990 634];
+            app.UIFigure.Name = 'MATLAB App';
+
+            % Create TabGroup
+            app.TabGroup = uitabgroup(app.UIFigure);
+            app.TabGroup.Position = [0 10 993 614];
+
+            % Create PPGTab
+            app.PPGTab = uitab(app.TabGroup);
+            app.PPGTab.Title = 'PPG';
+
+            % Create UIAxes_PPG1
+            app.UIAxes_PPG1 = uiaxes(app.PPGTab);
+            title(app.UIAxes_PPG1, 'PPG Real-Time')
+            xlabel(app.UIAxes_PPG1, 'Time (s)')
+            ylabel(app.UIAxes_PPG1, 'Voltage (mV)')
+            zlabel(app.UIAxes_PPG1, 'Z')
+            app.UIAxes_PPG1.Position = [218 116 756 447];
+
+            % Create bpm_PPG
+            app.bpm_PPG = uilabel(app.PPGTab);
+            app.bpm_PPG.FontSize = 60;
+            app.bpm_PPG.Position = [230 36 466 81];
+            app.bpm_PPG.Text = 'beats per minute';
+
+            % Create PulseRateLabel
+            app.PulseRateLabel = uilabel(app.PPGTab);
+            app.PulseRateLabel.FontSize = 60;
+            app.PulseRateLabel.Position = [137 36 68 81];
+            app.PulseRateLabel.Text = '- -';
+
+            % Create DirectionsLabel_PPG
+            app.DirectionsLabel_PPG = uilabel(app.PPGTab);
+            app.DirectionsLabel_PPG.HorizontalAlignment = 'center';
+            app.DirectionsLabel_PPG.FontSize = 20;
+            app.DirectionsLabel_PPG.Position = [8 430 223 52];
+            app.DirectionsLabel_PPG.Text = 'Directions:';
+
+            % Create StartRecordingButton_PPG
+            app.StartRecordingButton_PPG = uibutton(app.PPGTab, 'push');
+            app.StartRecordingButton_PPG.Position = [58 518 100 23];
+            app.StartRecordingButton_PPG.Text = 'Start Recording';
+
+            % Create Label
+            app.Label = uilabel(app.PPGTab);
+            app.Label.VerticalAlignment = 'top';
+            app.Label.WordWrap = 'on';
+            app.Label.Position = [39 313 166 118];
+            app.Label.Text = 'Gently place your finger over the red led and clear photodetector. Then select "Start Recording" to begin.       Please wait 30 seconds after the button turns green to see a final bpm.';
+
+            % Create ConnectedLampLabel
+            app.ConnectedLampLabel = uilabel(app.PPGTab);
+            app.ConnectedLampLabel.HorizontalAlignment = 'right';
+            app.ConnectedLampLabel.Position = [58 480 64 22];
+            app.ConnectedLampLabel.Text = 'Connected';
+
+            % Create ConnectedLamp
+            app.ConnectedLamp = uilamp(app.PPGTab);
+            app.ConnectedLamp.Position = [137 480 20 20];
+
+            % Create ThermistorTab
+            app.ThermistorTab = uitab(app.TabGroup);
+            app.ThermistorTab.Title = 'Thermistor';
+
+            % Create UIAxes_Thermistor1
+            app.UIAxes_Thermistor1 = uiaxes(app.ThermistorTab);
+            title(app.UIAxes_Thermistor1, 'Thermistor')
+            xlabel(app.UIAxes_Thermistor1, 'Time (s)')
+            ylabel(app.UIAxes_Thermistor1, 'Voltage')
+            zlabel(app.UIAxes_Thermistor1, 'Z')
+            app.UIAxes_Thermistor1.Position = [218 116 756 447];
+
+            % Create bpm_Thermistor
+            app.bpm_Thermistor = uilabel(app.ThermistorTab);
+            app.bpm_Thermistor.FontSize = 60;
+            app.bpm_Thermistor.Position = [230 36 520 81];
+            app.bpm_Thermistor.Text = 'breaths per minute';
+
+            % Create RespirationRateLabel
+            app.RespirationRateLabel = uilabel(app.ThermistorTab);
+            app.RespirationRateLabel.FontSize = 60;
+            app.RespirationRateLabel.Position = [137 36 68 81];
+            app.RespirationRateLabel.Text = '- -';
+
+            % Create DirectionsLabel_Thermistor
+            app.DirectionsLabel_Thermistor = uilabel(app.ThermistorTab);
+            app.DirectionsLabel_Thermistor.HorizontalAlignment = 'center';
+            app.DirectionsLabel_Thermistor.FontSize = 20;
+            app.DirectionsLabel_Thermistor.Position = [8 430 223 52];
+            app.DirectionsLabel_Thermistor.Text = 'Directions:';
+
+            % Create StartRecordingButton_Thermistor
+            app.StartRecordingButton_Thermistor = uibutton(app.ThermistorTab, 'push');
+            app.StartRecordingButton_Thermistor.ButtonPushedFcn = createCallbackFcn(app, @StartRecordingButton_ThermistorPushed, true);
+            app.StartRecordingButton_Thermistor.Position = [58 518 100 23];
+            app.StartRecordingButton_Thermistor.Text = 'Start Recording';
+
+            % Create DirectionsTextbox_Thermistor
+            app.DirectionsTextbox_Thermistor = uilabel(app.ThermistorTab);
+            app.DirectionsTextbox_Thermistor.VerticalAlignment = 'top';
+            app.DirectionsTextbox_Thermistor.WordWrap = 'on';
+            app.DirectionsTextbox_Thermistor.Position = [39 343 166 88];
+            app.DirectionsTextbox_Thermistor.Text = 'Place your mouth over a straw placed over the thermistor and select "Start Recording" to begin. ';
+
+            % Create ConnectedLamp_2Label
+            app.ConnectedLamp_2Label = uilabel(app.ThermistorTab);
+            app.ConnectedLamp_2Label.HorizontalAlignment = 'right';
+            app.ConnectedLamp_2Label.Position = [58 480 64 22];
+            app.ConnectedLamp_2Label.Text = 'Connected';
+
+            % Create ConnectedLamp_2
+            app.ConnectedLamp_2 = uilamp(app.ThermistorTab);
+            app.ConnectedLamp_2.Position = [137 480 20 20];
+
+            % Create ECGTab
+            app.ECGTab = uitab(app.TabGroup);
+            app.ECGTab.Title = 'ECG';
+
+            % Create UIAxes_ECG1
+            app.UIAxes_ECG1 = uiaxes(app.ECGTab);
+            title(app.UIAxes_ECG1, 'ECG ')
+            xlabel(app.UIAxes_ECG1, 'Time (s)')
+            ylabel(app.UIAxes_ECG1, 'Voltage')
+            zlabel(app.UIAxes_ECG1, 'Z')
+            app.UIAxes_ECG1.Position = [218 116 756 447];
+
+            % Create bpm_ECG
+            app.bpm_ECG = uilabel(app.ECGTab);
+            app.bpm_ECG.FontSize = 60;
+            app.bpm_ECG.Position = [230 36 466 81];
+            app.bpm_ECG.Text = 'beats per minute';
+
+            % Create HeartRateLabel
+            app.HeartRateLabel = uilabel(app.ECGTab);
+            app.HeartRateLabel.FontSize = 60;
+            app.HeartRateLabel.Position = [137 36 68 81];
+            app.HeartRateLabel.Text = '- -';
+
+            % Create DirectionsLabel_ECG
+            app.DirectionsLabel_ECG = uilabel(app.ECGTab);
+            app.DirectionsLabel_ECG.HorizontalAlignment = 'center';
+            app.DirectionsLabel_ECG.FontSize = 20;
+            app.DirectionsLabel_ECG.Position = [8 430 223 52];
+            app.DirectionsLabel_ECG.Text = 'Directions:';
+
+            % Create StartRecordingButton_ECG
+            app.StartRecordingButton_ECG = uibutton(app.ECGTab, 'push');
+            app.StartRecordingButton_ECG.ButtonPushedFcn = createCallbackFcn(app, @StartRecordingButton_ECGPushed, true);
+            app.StartRecordingButton_ECG.Position = [58 518 100 23];
+            app.StartRecordingButton_ECG.Text = 'Start Recording';
+
+            % Create DirectionsTextbox_ECG
+            app.DirectionsTextbox_ECG = uilabel(app.ECGTab);
+            app.DirectionsTextbox_ECG.VerticalAlignment = 'top';
+            app.DirectionsTextbox_ECG.WordWrap = 'on';
+            app.DirectionsTextbox_ECG.Position = [39 343 153 88];
+            app.DirectionsTextbox_ECG.Text = 'Please place electrodes on the body as shown in the information pamphlet and start recording. ';
+
+            % Create ConnectedLamp_3Label
+            app.ConnectedLamp_3Label = uilabel(app.ECGTab);
+            app.ConnectedLamp_3Label.HorizontalAlignment = 'right';
+            app.ConnectedLamp_3Label.Position = [58 480 64 22];
+            app.ConnectedLamp_3Label.Text = 'Connected';
+
+            % Create ConnectedLamp_3
+            app.ConnectedLamp_3 = uilamp(app.ECGTab);
+            app.ConnectedLamp_3.Position = [137 480 20 20];
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = SeniorDesignFinalApp
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            % Execute the startup function
+            runStartupFcn(app, @startupFcn)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
